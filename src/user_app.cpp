@@ -153,6 +153,30 @@ static std::string base64_decode(const std::string &input)
 }
 
 #if RICKYDATA_HOST_BRIDGE
+static bool open_bridge_socket(int *fd_out)
+{
+    const std::string host = getenv_or("RICKYDATA_BRIDGE_HOST", "127.0.0.1");
+    const int port = atoi(getenv_or("RICKYDATA_BRIDGE_PORT", "8765").c_str());
+
+    int fd = socket(AF_INET, SOCK_STREAM, 0);
+    if (fd < 0) return false;
+
+    sockaddr_in addr {};
+    addr.sin_family = AF_INET;
+    addr.sin_port = htons(static_cast<uint16_t>(port));
+    if (inet_pton(AF_INET, host.c_str(), &addr.sin_addr) != 1) {
+        close(fd);
+        return false;
+    }
+    if (connect(fd, reinterpret_cast<sockaddr *>(&addr), sizeof(addr)) != 0) {
+        close(fd);
+        return false;
+    }
+
+    *fd_out = fd;
+    return true;
+}
+
 static bool send_all(int fd, const std::string &data)
 {
     const char *ptr = data.c_str();
@@ -212,20 +236,8 @@ static bool post_bridge_chat(const std::string &agent_id, const std::string &mes
     const std::string host = getenv_or("RICKYDATA_BRIDGE_HOST", "127.0.0.1");
     const int port = atoi(getenv_or("RICKYDATA_BRIDGE_PORT", "8765").c_str());
 
-    int fd = socket(AF_INET, SOCK_STREAM, 0);
-    if (fd < 0) return false;
-
-    sockaddr_in addr {};
-    addr.sin_family = AF_INET;
-    addr.sin_port = htons(static_cast<uint16_t>(port));
-    if (inet_pton(AF_INET, host.c_str(), &addr.sin_addr) != 1) {
-        close(fd);
-        return false;
-    }
-    if (connect(fd, reinterpret_cast<sockaddr *>(&addr), sizeof(addr)) != 0) {
-        close(fd);
-        return false;
-    }
+    int fd = -1;
+    if (!open_bridge_socket(&fd)) return false;
 
     std::string body = "{\"agentId\":\"" + json_escape(agent_id) +
                        "\",\"message\":\"" + json_escape(message) + "\"}";
@@ -271,6 +283,43 @@ static bool post_bridge_chat(const std::string &agent_id, const std::string &mes
 
     close(fd);
     return headers_done && http_ok;
+}
+
+static bool get_bridge_path(const std::string &path, std::string *body_out)
+{
+    const std::string host = getenv_or("RICKYDATA_BRIDGE_HOST", "127.0.0.1");
+    const int port = atoi(getenv_or("RICKYDATA_BRIDGE_PORT", "8765").c_str());
+
+    int fd = -1;
+    if (!open_bridge_socket(&fd)) return false;
+
+    std::string request =
+        "GET " + path + " HTTP/1.1\r\n"
+        "Host: " + host + ":" + std::to_string(port) + "\r\n"
+        "Accept: application/json\r\n"
+        "Connection: close\r\n\r\n";
+    if (!send_all(fd, request)) {
+        close(fd);
+        return false;
+    }
+
+    std::string response;
+    char buf[1024];
+    while (true) {
+        ssize_t n = recv(fd, buf, sizeof(buf), 0);
+        if (n <= 0) break;
+        response.append(buf, static_cast<size_t>(n));
+    }
+    close(fd);
+
+    size_t pos = response.find("\r\n\r\n");
+    if (pos == std::string::npos) return false;
+    std::string headers = response.substr(0, pos);
+    bool http_ok = headers.find("HTTP/1.1 200") != std::string::npos ||
+                   headers.find("HTTP/1.0 200") != std::string::npos;
+    if (!http_ok) return false;
+    *body_out = response.substr(pos + 4);
+    return true;
 }
 #endif
 

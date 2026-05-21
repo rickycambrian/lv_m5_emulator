@@ -31,4 +31,6 @@ The emulator expects `../rickydata_code` beside this checkout for the firmware U
 
 This harness covers LVGL layout, touch/click callbacks, agent selection, RickyData auth/profile loading, SDK session creation, Gateway SSE streaming, and rendering live text/tool events.
 
+The bridge also exposes `/agents` and `/agents-lvgl` so the local harness can inspect which of the five configured agents are visible to the current wallet/profile. The LVGL emulator currently keeps the built-in five-agent list on screen because replacing LVGL list items from the native bridge refresh path needs more hardening.
+
 It does not emulate the ESP32 hardware path: AXP192 PMIC, CH9102F UART, I2S microphone/speaker, SPI SD/display contention, ESP-IDF heap/TLS fragmentation, watchdog timing, or GPIO0 audio sharing.

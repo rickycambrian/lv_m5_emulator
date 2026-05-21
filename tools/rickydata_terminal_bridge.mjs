@@ -121,11 +121,14 @@ function readJsonBody(req) {
 }
 
 function writeJson(res, status, payload) {
+  const body = JSON.stringify(payload);
   res.writeHead(status, {
     'Content-Type': 'application/json',
     'Cache-Control': 'no-store',
+    'Content-Length': Buffer.byteLength(body),
+    Connection: 'close',
   });
-  res.end(JSON.stringify(payload));
+  res.end(body);
 }
 
 function writeSse(res, event, text) {
@@ -148,6 +151,12 @@ async function listSelectedAgents(client) {
       available: Boolean(live),
     };
   });
+}
+
+function truncateForLvgl(value, max = 72) {
+  const text = String(value || '').replace(/\s+/g, ' ').trim();
+  if (text.length <= max) return text;
+  return `${text.slice(0, Math.max(0, max - 3))}...`;
 }
 
 async function main() {
@@ -180,6 +189,18 @@ async function main() {
         writeJson(res, 200, {
           agents: await listSelectedAgents(client),
         });
+        return;
+      }
+
+      if (req.method === 'GET' && url.pathname === '/agents-lvgl') {
+        const agents = await listSelectedAgents(client);
+        writeJson(res, 200, agents.map((agent) => ({
+          id: agent.id,
+          name: agent.name,
+          description: agent.available
+            ? truncateForLvgl(agent.description)
+            : 'Unavailable for this wallet/profile',
+        })));
         return;
       }
 
