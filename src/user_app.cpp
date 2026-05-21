@@ -1,6 +1,13 @@
 #include "lvgl.h"
 #include "lvgl_port_m5stack.hpp"
-#include "demos/lv_demos.h"
+#include "screen_agents.h"
+#include "screen_voice.h"
+#include "ui_manager.h"
+#include "ui_theme.h"
+
+#include <stdio.h>
+#include <stdlib.h>
+#include <string.h>
 
 #ifdef USE_EEZ_STUDIO
 #include "ui/ui.h"
@@ -22,28 +29,108 @@ extern "C" void action_example_for_eez(lv_event_t* e)
 void user_app(void)
 {
 #ifndef USE_EEZ_STUDIO
-    // You can test the lvgl default demo
     if (lvgl_port_lock()) {
-        lv_demo_benchmark();
-        // lv_demo_widgets();
-        // lv_demo_music();
-        // lv_demo_stress();
+        ui_theme_apply();
+        ui_manager_get_screen(SCREEN_VOICE);
+        ui_manager_get_screen(SCREEN_AGENTS);
         lvgl_port_unlock();
     }
 
-    // Or you can create your own lvgl app here
-    /*
-    if (lvgl_port_lock()) {
-        static lv_obj_t* btn1 = lv_btn_create(lv_scr_act());
-        lv_obj_align(btn1, LV_ALIGN_CENTER, 0, 0);
+    static char active_agent_id[80] = "erc8004-expert";
+    static char active_agent_name[80] = "ERC-8004 Expert";
 
-        static lv_obj_t* label = lv_label_create(btn1);
-        lv_label_set_text(label, "Button");
-        lv_obj_center(label);
+    static const char *agents_json =
+        "["
+        "{\"id\":\"cambrian-beta-lending-private-de6ec3\",\"name\":\"Cambrian Beta Lending\",\"description\":\"Private lending agent\"},"
+        "{\"id\":\"erc8004-expert\",\"name\":\"ERC-8004 Expert\",\"description\":\"Protocol and agent wallet help\"},"
+        "{\"id\":\"rickydatascience-copilot\",\"name\":\"RickyDataScience Copilot\",\"description\":\"RickyData development copilot\"},"
+        "{\"id\":\"geo-expert\",\"name\":\"Geo Expert\",\"description\":\"Geospatial analysis assistant\"},"
+        "{\"id\":\"rickydata-security-expert\",\"name\":\"RickyData Security\",\"description\":\"Security review assistant\"}"
+        "]";
 
-        lvgl_port_unlock();
+    auto set_agent_name = [](const char *agent_id) {
+        if (strcmp(agent_id, "cambrian-beta-lending-private-de6ec3") == 0) {
+            snprintf(active_agent_name, sizeof(active_agent_name), "%s", "Cambrian Lending");
+        } else if (strcmp(agent_id, "erc8004-expert") == 0) {
+            snprintf(active_agent_name, sizeof(active_agent_name), "%s", "ERC-8004 Expert");
+        } else if (strcmp(agent_id, "rickydatascience-copilot") == 0) {
+            snprintf(active_agent_name, sizeof(active_agent_name), "%s", "RickyData Copilot");
+        } else if (strcmp(agent_id, "geo-expert") == 0) {
+            snprintf(active_agent_name, sizeof(active_agent_name), "%s", "Geo Expert");
+        } else if (strcmp(agent_id, "rickydata-security-expert") == 0) {
+            snprintf(active_agent_name, sizeof(active_agent_name), "%s", "Security Expert");
+        } else {
+            snprintf(active_agent_name, sizeof(active_agent_name), "%s", agent_id);
+        }
+    };
+
+    screen_agents_set_callback(
+        [](const char *agent_id, void *ctx) {
+            (void)ctx;
+            snprintf(active_agent_id, sizeof(active_agent_id), "%s", agent_id);
+            if (strcmp(agent_id, "cambrian-beta-lending-private-de6ec3") == 0) {
+                snprintf(active_agent_name, sizeof(active_agent_name), "%s", "Cambrian Lending");
+            } else if (strcmp(agent_id, "erc8004-expert") == 0) {
+                snprintf(active_agent_name, sizeof(active_agent_name), "%s", "ERC-8004 Expert");
+            } else if (strcmp(agent_id, "rickydatascience-copilot") == 0) {
+                snprintf(active_agent_name, sizeof(active_agent_name), "%s", "RickyData Copilot");
+            } else if (strcmp(agent_id, "geo-expert") == 0) {
+                snprintf(active_agent_name, sizeof(active_agent_name), "%s", "Geo Expert");
+            } else if (strcmp(agent_id, "rickydata-security-expert") == 0) {
+                snprintf(active_agent_name, sizeof(active_agent_name), "%s", "Security Expert");
+            } else {
+                snprintf(active_agent_name, sizeof(active_agent_name), "%s", agent_id);
+            }
+
+            screen_voice_clear_text();
+            screen_voice_set_status(active_agent_name, 92, true);
+            screen_voice_append_text("Agent selected.\n");
+            screen_voice_append_text(active_agent_id);
+            screen_voice_append_text("\n\nHold to talk.\n");
+            ui_manager_show_screen(SCREEN_VOICE);
+        },
+        nullptr);
+
+    screen_voice_set_callback(
+        [](int action, void *ctx) {
+            (void)ctx;
+            if (action == VOICE_ACTION_START_RECORD) {
+                screen_voice_clear_text();
+                screen_voice_set_button_state(VOICE_BTN_RECORDING);
+                screen_voice_append_text("Recording from Core2 microphone...\n");
+                screen_voice_append_text("(emulator harness: audio capture is stubbed)\n");
+            } else if (action == VOICE_ACTION_STOP_RECORD) {
+                screen_voice_set_button_state(VOICE_BTN_PROCESSING);
+                screen_voice_append_text("\nTranscript: \"das das\"\n");
+                screen_voice_append_text("POST agents.rickydata.org/agents/");
+                screen_voice_append_text(active_agent_id);
+                screen_voice_append_text("/chat\n\n");
+                screen_voice_append_text("Streaming response:\n");
+                screen_voice_append_text("This Mac emulator is rendering the firmware LVGL UI. The live Gateway, STT, and TTS path still needs the real Core2 or a separate host network shim.\n");
+                screen_voice_set_button_state(VOICE_BTN_IDLE);
+            } else if (action == VOICE_ACTION_STOP_PLAYBACK) {
+                screen_voice_append_text("\nPlayback stopped.\n");
+                screen_voice_set_button_state(VOICE_BTN_IDLE);
+            } else if (action == VOICE_ACTION_RETRY) {
+                screen_voice_set_button_state(VOICE_BTN_IDLE);
+            }
+        },
+        nullptr);
+
+    set_agent_name(active_agent_id);
+    screen_voice_set_status(active_agent_name, 92, true);
+    screen_voice_append_text("Agent selected.\n");
+    screen_voice_append_text(active_agent_id);
+    screen_voice_append_text("\n\nHold to talk.\n");
+    screen_agents_set_selected(active_agent_id);
+    screen_agents_set_list(agents_json);
+
+    const char *screen = getenv("RICKYDATA_EMULATOR_SCREEN");
+    if (screen != nullptr && strcmp(screen, "voice") == 0) {
+        ui_manager_show_screen(SCREEN_VOICE);
+    } else {
+        ui_manager_show_screen(SCREEN_AGENTS);
     }
-    */
 #else
     // Or you can initialize the UI for EEZ Studio if you are using it
     if (lvgl_port_lock()) {
