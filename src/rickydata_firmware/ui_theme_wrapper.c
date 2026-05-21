@@ -1,1 +1,1 @@
-#include "/Users/riccardoesclapon/Documents/github/rickydata_code/devices/rickydata-terminal/main/ui/ui_theme.c"
+#include "ui_theme.c"
